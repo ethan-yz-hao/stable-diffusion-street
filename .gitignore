@@ -2,3 +2,4 @@
 model/
 .gradio
 .venv
+.env
