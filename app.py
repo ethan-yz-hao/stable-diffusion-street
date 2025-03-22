@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 import torch
-from diffusers import ControlNetModel, AutoencoderKL, StableDiffusionXLControlNetPipeline
+from diffusers import ControlNetModel, AutoencoderKL, StableDiffusionXLControlNetPipeline, StableDiffusionXLControlNetInpaintPipeline
 from transformers import AutoImageProcessor, UperNetForSemanticSegmentation
 from PIL import Image
 import numpy as np
@@ -15,7 +15,7 @@ CORS(app)  # Enable CORS for all routes
 # Global variables to store models
 controlnet = None
 vae = None
-pipe = None
+inpaint_pipe = None  # Add this for the inpainting pipeline
 image_processor = None
 image_segmentor = None
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -57,7 +57,7 @@ ade_palette = np.asarray([
 
 
 def load_models():
-    global controlnet, vae, pipe, image_processor, image_segmentor
+    global controlnet, vae, inpaint_pipe, image_processor, image_segmentor
     
     print("Loading models...")
     
@@ -71,11 +71,11 @@ def load_models():
         "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
     ).to(device)
     
-    # Load StableDiffusion pipeline
-    pipe = StableDiffusionXLControlNetPipeline.from_pretrained(
+    # Load inpainting pipeline
+    inpaint_pipe = StableDiffusionXLControlNetInpaintPipeline.from_pretrained(
         "stabilityai/sdxl-turbo",
-        vae=vae,
         controlnet=controlnet,
+        vae=vae,
         torch_dtype=torch.float16
     ).to(device)
     
@@ -120,7 +120,7 @@ def segment_input_image(img):
     
     return color_segmentation
 
-def generate_image_from_segmentation(prompt, seg_image, original_image=None, use_mask=False):
+def generate_image_from_segmentation(prompt, seg_image, original_image, use_mask=False):
     # Resize segmentation image
     seg_image = resize_img(seg_image)
     
@@ -137,32 +137,18 @@ def generate_image_from_segmentation(prompt, seg_image, original_image=None, use
         mask = np.array(seg_image)
         mask_areas = np.all(mask == [0, 0, 0], axis=-1)
         
-        # Generate image using the pipeline
-        output = pipe(
-            prompt,
-            image=seg_image,
-            strength=0.9,
-            num_inference_steps=2,
-            guidance_scale=0.9,
-            width=seg_image.width,
-            height=seg_image.height,
-            controlnet_conditioning_scale=1.0,
-        ).images[0]
+        # Create a proper mask image for inpainting
+        # White (1) for areas to change, Black (0) for areas to preserve
+        mask_image = np.zeros_like(mask_areas, dtype=np.uint8)
+        mask_image[~mask_areas] = 255  # Areas to generate are white
+        mask_image = Image.fromarray(mask_image)
         
-        # Convert to numpy arrays for manipulation
-        output_array = np.array(output)
-        original_array = np.array(original_image)
-        
-        # Apply the mask: keep original image pixels where mask_areas is True
-        output_array[mask_areas] = original_array[mask_areas]
-        
-        # Convert back to PIL Image
-        output = Image.fromarray(output_array)
-    else:
-        # Standard generation without masking
-        output = pipe(
-            prompt,
-            image=seg_image,
+        # Use the inpainting pipeline for better blending
+        output = inpaint_pipe(
+            prompt=prompt,
+            image=original_image,  # Original image
+            mask_image=mask_image,  # Areas to modify
+            control_image=seg_image,  # ControlNet conditioning
             strength=0.9,
             num_inference_steps=2,
             guidance_scale=0.9,
