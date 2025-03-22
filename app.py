@@ -234,7 +234,6 @@ def generate():
         prompt = data.get('prompt', '')
         seg_image_base64 = data.get('segmentation_image', '')
         original_image = data.get('original_image', None)
-        use_mask = data.get('use_mask', False)
         
         if not prompt or not seg_image_base64:
             return jsonify({'error': 'Missing prompt or segmentation image'}), 400
@@ -247,8 +246,7 @@ def generate():
         generated_img = generate_image_from_segmentation(
             prompt, 
             seg_image, 
-            original_image=original_image, 
-            use_mask=use_mask
+            original_image=original_image
         )
         
         # Convert to base64 for response

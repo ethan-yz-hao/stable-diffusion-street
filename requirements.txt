@@ -1,5 +1,6 @@
 diffusers
 torch
+accelerate
 gradio
 Pillow
 numpy
