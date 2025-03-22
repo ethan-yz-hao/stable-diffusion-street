@@ -473,7 +473,6 @@ function App() {
                 prompt: prompt,
                 segmentation_image: imageToUse,
                 original_image: uploadedImage,
-                use_mask: true,
             });
 
             setGeneratedImage(response.data.generated_image);
