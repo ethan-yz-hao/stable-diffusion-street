@@ -6,8 +6,11 @@ from PIL import Image
 import numpy as np
 import io
 import base64
+import traceback  # For detailed error tracing
+from flask_cors import CORS  # Import CORS
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Global variables to store models
 controlnet = None
@@ -103,6 +106,9 @@ def segment_input_image(img):
         seg = image_processor.post_process_semantic_segmentation(
             outputs, target_sizes=[img.size[::-1]])[0]
         
+        # Move tensor to CPU before converting to numpy
+        seg = seg.cpu()
+        
         # Create colored segmentation
         color_seg = np.zeros((seg.shape[0], seg.shape[1], 3), dtype=np.uint8)
         for label, color in enumerate(ade_palette):
@@ -148,9 +154,21 @@ def segment_image():
         return jsonify({'error': 'No selected file'}), 400
     
     try:
+        # Print debugging info
+        print(f"Processing file: {file.filename}, size: {file.content_length} bytes")
+        
         # Read and process the image
         img = Image.open(file.stream).convert('RGB')
+        print(f"Image opened successfully: {img.size}, mode: {img.mode}")
+        
+        # Check if models are loaded
+        if image_processor is None or image_segmentor is None:
+            print("Models not loaded! Loading now...")
+            load_models()
+        
+        # Segment the image
         segmented_img = segment_input_image(img)
+        print("Segmentation completed successfully")
         
         # Convert to base64 for response
         img_base64 = pil_to_base64(segmented_img)
@@ -159,7 +177,11 @@ def segment_image():
             'segmented_image': img_base64
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        # Print detailed error information
+        error_traceback = traceback.format_exc()
+        print(f"Error in segment_image: {str(e)}")
+        print(error_traceback)
+        return jsonify({'error': str(e), 'traceback': error_traceback}), 500
 
 @app.route('/generate', methods=['POST'])
 def generate():
@@ -200,8 +222,12 @@ def index():
     return "Street View Generation API is running!"
 
 if __name__ == '__main__':
-    # Load models on startup
-    load_models()
+    try:
+        # Load models on startup
+        load_models()
+    except Exception as e:
+        print(f"Error loading models: {str(e)}")
+        print(traceback.format_exc())
     
     # Run the Flask app
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=True)  # Enable debug mode for more info
