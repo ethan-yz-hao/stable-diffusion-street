@@ -24,7 +24,7 @@ const center = {
 };
 
 // Get Google Maps API key from environment variables
-const googleMapsApiKey = "AIzaSyDvMT2K3oZ8QpoDvPbxCCDu3dAKyioAbIA";
+const googleMapsApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 
 function App() {
     const [selectedLocation, setSelectedLocation] =
