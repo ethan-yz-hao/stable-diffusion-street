@@ -259,3 +259,31 @@ h2, h3 {
       "generated-section";
   }
 }
+
+.tool-selector {
+  display: flex;
+  margin-bottom: 15px;
+  width: 100%;
+}
+
+.tool-button {
+  flex: 1;
+  padding: 8px;
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+.tool-button.active {
+  background-color: #007bff;
+  color: white;
+  border-color: #0056b3;
+}
+
+.mask-info {
+  background-color: #f8f9fa;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  border: 1px solid #ddd;
+}

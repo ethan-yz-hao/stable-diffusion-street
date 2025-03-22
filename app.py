@@ -120,21 +120,56 @@ def segment_input_image(img):
     
     return color_segmentation
 
-def generate_image_from_segmentation(prompt, seg_image):
+def generate_image_from_segmentation(prompt, seg_image, original_image=None, use_mask=False):
     # Resize segmentation image
     seg_image = resize_img(seg_image)
     
-    # Generate image using the pipeline
-    output = pipe(
-        prompt,
-        image=seg_image,
-        strength=0.9,
-        num_inference_steps=2,
-        guidance_scale=0.9,
-        width=seg_image.width,
-        height=seg_image.height,
-        controlnet_conditioning_scale=1.0,
-    ).images[0]
+    # If we're using masking and have an original image
+    if use_mask and original_image is not None:
+        # Convert original image to PIL if it's base64
+        if isinstance(original_image, str) and original_image.startswith('data:image'):
+            original_image_data = original_image.split(',')[1]
+            original_image = Image.open(io.BytesIO(base64.b64decode(original_image_data))).convert('RGB')
+            original_image = resize_img(original_image)
+        
+        # Create a mask from the segmentation image
+        # Black pixels (#000000) in the segmentation image indicate areas to preserve
+        mask = np.array(seg_image)
+        mask_areas = np.all(mask == [0, 0, 0], axis=-1)
+        
+        # Generate image using the pipeline
+        output = pipe(
+            prompt,
+            image=seg_image,
+            strength=0.9,
+            num_inference_steps=2,
+            guidance_scale=0.9,
+            width=seg_image.width,
+            height=seg_image.height,
+            controlnet_conditioning_scale=1.0,
+        ).images[0]
+        
+        # Convert to numpy arrays for manipulation
+        output_array = np.array(output)
+        original_array = np.array(original_image)
+        
+        # Apply the mask: keep original image pixels where mask_areas is True
+        output_array[mask_areas] = original_array[mask_areas]
+        
+        # Convert back to PIL Image
+        output = Image.fromarray(output_array)
+    else:
+        # Standard generation without masking
+        output = pipe(
+            prompt,
+            image=seg_image,
+            strength=0.9,
+            num_inference_steps=2,
+            guidance_scale=0.9,
+            width=seg_image.width,
+            height=seg_image.height,
+            controlnet_conditioning_scale=1.0,
+        ).images[0]
     
     return output
 
@@ -193,6 +228,8 @@ def generate():
         data = request.json
         prompt = data.get('prompt', '')
         seg_image_base64 = data.get('segmentation_image', '')
+        original_image = data.get('original_image', None)
+        use_mask = data.get('use_mask', False)
         
         if not prompt or not seg_image_base64:
             return jsonify({'error': 'Missing prompt or segmentation image'}), 400
@@ -202,7 +239,12 @@ def generate():
         seg_image = Image.open(io.BytesIO(base64.b64decode(seg_image_data))).convert('RGB')
         
         # Generate image
-        generated_img = generate_image_from_segmentation(prompt, seg_image)
+        generated_img = generate_image_from_segmentation(
+            prompt, 
+            seg_image, 
+            original_image=original_image, 
+            use_mask=use_mask
+        )
         
         # Convert to base64 for response
         img_base64 = pil_to_base64(generated_img)

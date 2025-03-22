@@ -97,6 +97,8 @@ const ImageEditor = ({
         name: string;
     } | null>(null);
     const [customColor, setCustomColor] = useState("#FF0000");
+    const [maskColor, setMaskColor] = useState("#000000"); // Black color for mask
+    const [isMaskMode, setIsMaskMode] = useState(false); // Toggle for mask mode
     const [lines, setLines] = useState<
         {
             color: string;
@@ -116,8 +118,9 @@ const ImageEditor = ({
         }
     }, [segmentationClasses]);
 
-    // Get the active color (either selected class color or custom color)
+    // Get the active color (either selected class color, custom color, or mask color)
     const getActiveColor = () => {
+        if (isMaskMode) return maskColor;
         if (!selectedClass) return "#000000"; // Default color if nothing is selected yet
         return selectedClass.id === "custom"
             ? customColor
@@ -189,31 +192,47 @@ const ImageEditor = ({
                     <input
                         type="range"
                         min="1"
-                        max="20"
+                        max="100"
                         value={brushSize}
                         onChange={(e) => setBrushSize(parseInt(e.target.value))}
                     />
                     <span>{brushSize}px</span>
                 </div>
-                <div className="segment-class-selector">
-                    <label>Segment Class:</label>
-                    <select
-                        value={selectedClass?.id || ""}
-                        onChange={handleClassChange}
-                        className="segment-dropdown"
+                <div className="tool-selector">
+                    <button
+                        className={`tool-button ${!isMaskMode ? "active" : ""}`}
+                        onClick={() => setIsMaskMode(false)}
                     >
-                        {segmentationClasses.map((cls, i) => (
-                            <option key={i} value={cls.id}>
-                                {cls.name}
-                            </option>
-                        ))}
-                    </select>
-                    <div
-                        className="color-preview"
-                        style={{ backgroundColor: getActiveColor() }}
-                    ></div>
+                        Paint Segments
+                    </button>
+                    <button
+                        className={`tool-button ${isMaskMode ? "active" : ""}`}
+                        onClick={() => setIsMaskMode(true)}
+                    >
+                        Mask (Preserve)
+                    </button>
                 </div>
-                {selectedClass?.id === "custom" && (
+                {!isMaskMode && (
+                    <div className="segment-class-selector">
+                        <label>Segment Class:</label>
+                        <select
+                            value={selectedClass?.id || ""}
+                            onChange={handleClassChange}
+                            className="segment-dropdown"
+                        >
+                            {segmentationClasses.map((cls, i) => (
+                                <option key={i} value={cls.id}>
+                                    {cls.name}
+                                </option>
+                            ))}
+                        </select>
+                        <div
+                            className="color-preview"
+                            style={{ backgroundColor: getActiveColor() }}
+                        ></div>
+                    </div>
+                )}
+                {selectedClass?.id === "custom" && !isMaskMode && (
                     <div className="custom-color-picker">
                         <label>Custom Color:</label>
                         <input
@@ -221,6 +240,14 @@ const ImageEditor = ({
                             value={customColor}
                             onChange={(e) => setCustomColor(e.target.value)}
                         />
+                    </div>
+                )}
+                {isMaskMode && (
+                    <div className="mask-info">
+                        <p>
+                            Paint areas you want to preserve from the original
+                            image
+                        </p>
                     </div>
                 )}
                 <div className="editor-buttons">
@@ -445,6 +472,8 @@ function App() {
             const response = await axios.post(`${API_URL}/generate`, {
                 prompt: prompt,
                 segmentation_image: imageToUse,
+                original_image: uploadedImage,
+                use_mask: true,
             });
 
             setGeneratedImage(response.data.generated_image);
