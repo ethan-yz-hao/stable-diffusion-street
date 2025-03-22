@@ -171,3 +171,91 @@ button:disabled {
 h2, h3 {
   margin-top: 0;
 }
+
+/* Updated Image Editor Styles */
+.image-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editor-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 15px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 10px;
+}
+
+.brush-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brush-controls input[type="range"] {
+  flex: 1;
+}
+
+.segment-class-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.segment-dropdown {
+  flex: 1;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  background-color: white;
+}
+
+.color-preview {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.custom-color-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-color-picker input[type="color"] {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.editor-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.canvas-container {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0 auto;
+  max-width: 100%;
+  background-color: #f5f5f5;
+}
+
+@media (max-width: 768px) {
+  .layout-container {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "left-column"
+      "right-column"
+      "generated-section";
+  }
+}
