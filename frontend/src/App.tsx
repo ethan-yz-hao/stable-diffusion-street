@@ -1,5 +1,10 @@
 import React, { useState, useRef } from "react";
-import { GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
+import {
+    GoogleMap,
+    LoadScript,
+    Marker,
+    StreetViewPanorama,
+} from "@react-google-maps/api";
 import axios from "axios";
 import "./App.css";
 
@@ -30,8 +35,13 @@ function App() {
     const [prompt, setPrompt] = useState<string>("a street in Brooklyn, NY");
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<"map" | "streetview">("map");
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const mapRef = useRef<google.maps.Map | null>(null);
+    const streetViewPanoramaRef = useRef<google.maps.StreetViewPanorama | null>(
+        null
+    );
 
     // Handle image upload
     const handleImageUpload = async (
@@ -49,6 +59,138 @@ function App() {
         };
 
         reader.readAsDataURL(file);
+    };
+
+    // Capture the current view as an image (either map or street view)
+    const captureImage = () => {
+        if (!selectedLocation) {
+            setError("Please select a location first");
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            if (viewMode === "map") {
+                captureMapImage();
+            } else {
+                captureStreetViewImage();
+            }
+        } catch (err) {
+            console.error("Error capturing image:", err);
+            setError("Failed to capture image");
+            setIsLoading(false);
+        }
+    };
+
+    // Capture map view
+    const captureMapImage = () => {
+        if (!mapRef.current || !selectedLocation) {
+            setError("Map is not loaded yet");
+            setIsLoading(false);
+            return;
+        }
+
+        // Get the current zoom
+        const zoom = mapRef.current.getZoom();
+
+        // Construct a Google Static Maps API URL
+        const width = 640; // Max for free tier
+        const height = 400;
+        const scale = 2; // For higher resolution
+
+        let mapUrl = `https://maps.googleapis.com/maps/api/staticmap?`;
+        mapUrl += `center=${selectedLocation.lat},${selectedLocation.lng}`;
+        mapUrl += `&zoom=${zoom || 16}`;
+        mapUrl += `&size=${width}x${height}`;
+        mapUrl += `&scale=${scale}`;
+        mapUrl += `&maptype=roadmap`;
+
+        // Add marker
+        mapUrl += `&markers=color:red|${selectedLocation.lat},${selectedLocation.lng}`;
+
+        // Add API key
+        mapUrl += `&key=${googleMapsApiKey}`;
+
+        // Load the image
+        loadImageFromUrl(mapUrl);
+    };
+
+    // Capture street view
+    const captureStreetViewImage = () => {
+        if (!selectedLocation) {
+            setError("Please select a location first");
+            setIsLoading(false);
+            return;
+        }
+
+        // Get heading from street view if available
+        let heading = 0;
+        if (streetViewPanoramaRef.current) {
+            heading = streetViewPanoramaRef.current.getPov().heading || 0;
+        }
+
+        // Construct a Google Street View Static API URL
+        const width = 640; // Max for free tier
+        const height = 400;
+        const fov = 90; // Field of view
+
+        let streetViewUrl = `https://maps.googleapis.com/maps/api/streetview?`;
+        streetViewUrl += `size=${width}x${height}`;
+        streetViewUrl += `&location=${selectedLocation.lat},${selectedLocation.lng}`;
+        streetViewUrl += `&heading=${heading}`;
+        streetViewUrl += `&pitch=0`;
+        streetViewUrl += `&fov=${fov}`;
+
+        // Add API key
+        streetViewUrl += `&key=${googleMapsApiKey}`;
+
+        // Load the image
+        loadImageFromUrl(streetViewUrl);
+    };
+
+    // Helper function to load image from URL
+    const loadImageFromUrl = (url: string) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+
+        img.onload = () => {
+            // Create canvas to draw the image
+            const canvas = document.createElement("canvas");
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+                ctx.drawImage(img, 0, 0);
+                const imageDataUrl = canvas.toDataURL("image/png");
+                setUploadedImage(imageDataUrl);
+                setIsLoading(false);
+            } else {
+                setError("Could not create canvas context");
+                setIsLoading(false);
+            }
+        };
+
+        img.onerror = () => {
+            setError(
+                "Failed to load image. Street View may not be available at this location."
+            );
+            setIsLoading(false);
+        };
+
+        img.src = url;
+    };
+
+    // Toggle between map and street view
+    const toggleViewMode = () => {
+        setViewMode(viewMode === "map" ? "streetview" : "map");
+    };
+
+    // Handle street view load
+    const onStreetViewLoad = (panorama: google.maps.StreetViewPanorama) => {
+        streetViewPanoramaRef.current = panorama;
     };
 
     // Segment the uploaded image
@@ -129,6 +271,11 @@ function App() {
         }
     };
 
+    // Store map reference when the map loads
+    const onMapLoad = (map: google.maps.Map) => {
+        mapRef.current = map;
+    };
+
     return (
         <div className="App">
             <header className="App-header">
@@ -138,17 +285,58 @@ function App() {
             <main>
                 <section className="map-section">
                     <h2>Select Location</h2>
-                    <LoadScript googleMapsApiKey={googleMapsApiKey}>
-                        <GoogleMap
-                            mapContainerStyle={mapContainerStyle}
-                            center={center}
-                            zoom={16}
-                            onClick={handleMapClick}
+                    <div className="view-toggle">
+                        <button
+                            className={viewMode === "map" ? "active" : ""}
+                            onClick={() => setViewMode("map")}
                         >
-                            {selectedLocation && (
-                                <Marker position={selectedLocation} />
-                            )}
-                        </GoogleMap>
+                            Map View
+                        </button>
+                        <button
+                            className={
+                                viewMode === "streetview" ? "active" : ""
+                            }
+                            onClick={() => setViewMode("streetview")}
+                        >
+                            Street View
+                        </button>
+                    </div>
+
+                    <LoadScript googleMapsApiKey={googleMapsApiKey}>
+                        {viewMode === "map" ? (
+                            <GoogleMap
+                                mapContainerStyle={mapContainerStyle}
+                                center={selectedLocation || center}
+                                zoom={16}
+                                onClick={handleMapClick}
+                                onLoad={onMapLoad}
+                            >
+                                {selectedLocation && (
+                                    <Marker position={selectedLocation} />
+                                )}
+                            </GoogleMap>
+                        ) : (
+                            <GoogleMap
+                                mapContainerStyle={mapContainerStyle}
+                                center={selectedLocation || center}
+                                zoom={16}
+                                onClick={handleMapClick}
+                                onLoad={onMapLoad}
+                            >
+                                {selectedLocation && (
+                                    <Marker position={selectedLocation} />
+                                )}
+                                {selectedLocation && (
+                                    <StreetViewPanorama
+                                        options={{
+                                            position: selectedLocation,
+                                            visible: true,
+                                        }}
+                                        onLoad={onStreetViewLoad}
+                                    />
+                                )}
+                            </GoogleMap>
+                        )}
                     </LoadScript>
 
                     {selectedLocation && (
@@ -157,6 +345,19 @@ function App() {
                                 Selected: {selectedLocation.lat.toFixed(4)},{" "}
                                 {selectedLocation.lng.toFixed(4)}
                             </p>
+                            <button
+                                onClick={captureImage}
+                                className="capture-btn"
+                                disabled={isLoading}
+                            >
+                                {isLoading
+                                    ? "Capturing..."
+                                    : `Capture ${
+                                          viewMode === "map"
+                                              ? "Map"
+                                              : "Street View"
+                                      } as Image`}
+                            </button>
                         </div>
                     )}
                 </section>
