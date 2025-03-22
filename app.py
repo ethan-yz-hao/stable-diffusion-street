@@ -8,6 +8,9 @@ import io
 import base64
 import traceback  # For detailed error tracing
 from flask_cors import CORS  # Import CORS
+import os
+import shutil
+from huggingface_hub import snapshot_download  # Add this import
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -56,14 +59,32 @@ ade_palette = np.asarray([
 ])
 
 
+def download_model():
+    model_path = "model/diffusion_pytorch_model.safetensors"
+    if not os.path.exists("model") or not os.path.exists(model_path):
+        print("Downloading model files...")
+        snapshot_download_path = snapshot_download(
+            repo_id="abovzv/sdxl_segmentation_controlnet_ade20k")
+        # create a full copy of the snapshot_download_path to the current directory under the name "model"
+        shutil.copytree(snapshot_download_path, "model")
+        # use shutil and rename the file  "sdxl_segmentation_ade20k_controlnet.safetensors" to "diffusion_pytorch_model.safetensors"
+        # so to meet the requirements of the StableDiffusionXLControlNetPipeline
+        shutil.move("model/sdxl_segmentation_ade20k_controlnet.safetensors",
+                    model_path)
+    print("Model files downloaded.")
+    return "model"
+
 def load_models():
     global controlnet, vae, inpaint_pipe, image_processor, image_segmentor
     
     print("Loading models...")
     
-    # Load ControlNet model
+    # Download the model first
+    model_path = download_model()
+    
+    # Load ControlNet model from the local path
     controlnet = ControlNetModel.from_pretrained(
-        "model", torch_dtype=torch.float16
+        model_path, torch_dtype=torch.float16
     ).to(device)
     
     # Load VAE
@@ -120,42 +141,40 @@ def segment_input_image(img):
     
     return color_segmentation
 
-def generate_image_from_segmentation(prompt, seg_image, original_image, use_mask=False):
+def generate_image_from_segmentation(prompt, seg_image, original_image):
     # Resize segmentation image
     seg_image = resize_img(seg_image)
+
+    # Convert original image to PIL if it's base64
+    if isinstance(original_image, str) and original_image.startswith('data:image'):
+        original_image_data = original_image.split(',')[1]
+        original_image = Image.open(io.BytesIO(base64.b64decode(original_image_data))).convert('RGB')
+        original_image = resize_img(original_image)
     
-    # If we're using masking and have an original image
-    if use_mask and original_image is not None:
-        # Convert original image to PIL if it's base64
-        if isinstance(original_image, str) and original_image.startswith('data:image'):
-            original_image_data = original_image.split(',')[1]
-            original_image = Image.open(io.BytesIO(base64.b64decode(original_image_data))).convert('RGB')
-            original_image = resize_img(original_image)
-        
-        # Create a mask from the segmentation image
-        # Black pixels (#000000) in the segmentation image indicate areas to preserve
-        mask = np.array(seg_image)
-        mask_areas = np.all(mask == [0, 0, 0], axis=-1)
-        
-        # Create a proper mask image for inpainting
-        # White (1) for areas to change, Black (0) for areas to preserve
-        mask_image = np.zeros_like(mask_areas, dtype=np.uint8)
-        mask_image[~mask_areas] = 255  # Areas to generate are white
-        mask_image = Image.fromarray(mask_image)
-        
-        # Use the inpainting pipeline for better blending
-        output = inpaint_pipe(
-            prompt=prompt,
-            image=original_image,  # Original image
-            mask_image=mask_image,  # Areas to modify
-            control_image=seg_image,  # ControlNet conditioning
-            strength=0.9,
-            num_inference_steps=2,
-            guidance_scale=0.9,
-            width=seg_image.width,
-            height=seg_image.height,
-            controlnet_conditioning_scale=1.0,
-        ).images[0]
+    # Create a mask from the segmentation image
+    # Black pixels (#000000) in the segmentation image indicate areas to preserve
+    mask = np.array(seg_image)
+    mask_areas = np.all(mask == [0, 0, 0], axis=-1)
+    
+    # Create a proper mask image for inpainting
+    # White (1) for areas to change, Black (0) for areas to preserve
+    mask_image = np.zeros_like(mask_areas, dtype=np.uint8)
+    mask_image[~mask_areas] = 255  # Areas to generate are white
+    mask_image = Image.fromarray(mask_image)
+    
+    # Use the inpainting pipeline for better blending
+    output = inpaint_pipe(
+        prompt=prompt,
+        image=original_image,  # Original image
+        mask_image=mask_image,  # Areas to modify
+        control_image=seg_image,  # ControlNet conditioning
+        strength=0.9,
+        num_inference_steps=2,
+        guidance_scale=0.9,
+        width=seg_image.width,
+        height=seg_image.height,
+        controlnet_conditioning_scale=1.0,
+    ).images[0]
     
     return output
 
