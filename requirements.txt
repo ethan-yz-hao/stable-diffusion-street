@@ -7,3 +7,4 @@ matplotlib
 huggingface_hub
 transformers
 python-dotenv
+flask

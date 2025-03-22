@@ -34,3 +34,16 @@ pip install -r requirements.txt
 # Install and register the Jupyter kernel
 pip install ipykernel
 ```
+
+## Frontend
+
+```bash
+cd frontend
+npm start
+```
+
+## Backend
+
+```bash
+python app.py
+```
