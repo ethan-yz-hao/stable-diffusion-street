@@ -23,6 +23,10 @@ const center = {
     lng: -74.0028,
 };
 
+// Placeholder image for empty states
+const placeholderImage =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'%3E%3Crect width='100%25' height='100%25' fill='%23cccccc'/%3E%3C/svg%3E";
+
 // Get Google Maps API key from environment variables
 const googleMapsApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 
@@ -32,7 +36,9 @@ function App() {
     const [uploadedImage, setUploadedImage] = useState<string | null>(null);
     const [segmentedImage, setSegmentedImage] = useState<string | null>(null);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-    const [prompt, setPrompt] = useState<string>("a street in Brooklyn, NY");
+    const [prompt, setPrompt] = useState<string>(
+        "a street in West Village, NY"
+    );
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<"map" | "streetview">("map");
@@ -219,13 +225,6 @@ function App() {
                 lat: e.latLng.lat(),
                 lng: e.latLng.lng(),
             });
-
-            // Update prompt with location
-            setPrompt(
-                `a street view of ${e.latLng.lat().toFixed(4)}, ${e.latLng
-                    .lng()
-                    .toFixed(4)}`
-            );
         }
     };
 
@@ -240,28 +239,11 @@ function App() {
                 <h1>Street View Generation</h1>
             </header>
 
-            <main>
-                <section className="map-section">
-                    <h2>Select Location</h2>
-                    <div className="view-toggle">
-                        <button
-                            className={viewMode === "map" ? "active" : ""}
-                            onClick={() => setViewMode("map")}
-                        >
-                            Map View
-                        </button>
-                        <button
-                            className={
-                                viewMode === "streetview" ? "active" : ""
-                            }
-                            onClick={() => setViewMode("streetview")}
-                        >
-                            Street View
-                        </button>
-                    </div>
-
-                    <LoadScript googleMapsApiKey={googleMapsApiKey}>
-                        {viewMode === "map" ? (
+            <main className="layout-container">
+                <div className="left-column">
+                    <section className="map-section">
+                        <h2>Map</h2>
+                        <LoadScript googleMapsApiKey={googleMapsApiKey}>
                             <GoogleMap
                                 mapContainerStyle={mapContainerStyle}
                                 center={selectedLocation || center}
@@ -275,114 +257,125 @@ function App() {
                                 {selectedLocation && (
                                     <Marker position={selectedLocation} />
                                 )}
+                                {viewMode === "streetview" &&
+                                    selectedLocation && (
+                                        <StreetViewPanorama
+                                            options={{
+                                                position: selectedLocation,
+                                                visible: true,
+                                            }}
+                                            onLoad={onStreetViewLoad}
+                                        />
+                                    )}
                             </GoogleMap>
-                        ) : (
-                            <GoogleMap
-                                mapContainerStyle={mapContainerStyle}
-                                center={selectedLocation || center}
-                                zoom={16}
-                                onClick={handleMapClick}
-                                onLoad={onMapLoad}
-                            >
-                                {selectedLocation && (
-                                    <Marker position={selectedLocation} />
-                                )}
-                                {selectedLocation && (
-                                    <StreetViewPanorama
-                                        options={{
-                                            position: selectedLocation,
-                                            visible: true,
-                                        }}
-                                        onLoad={onStreetViewLoad}
-                                    />
-                                )}
-                            </GoogleMap>
-                        )}
-                    </LoadScript>
+                        </LoadScript>
 
-                    {selectedLocation && viewMode === "streetview" && (
-                        <div className="location-info">
-                            <p>
-                                Selected: {selectedLocation.lat.toFixed(4)},{" "}
-                                {selectedLocation.lng.toFixed(4)}
-                            </p>
+                        <div className="view-toggle">
                             <button
-                                onClick={captureImage}
-                                className="capture-btn"
-                                disabled={isLoading}
+                                className={viewMode === "map" ? "active" : ""}
+                                onClick={() => setViewMode("map")}
                             >
-                                {isLoading
-                                    ? "Capturing..."
-                                    : "Capture Street View as Image"}
+                                Map View
+                            </button>
+                            <button
+                                className={
+                                    viewMode === "streetview" ? "active" : ""
+                                }
+                                onClick={() => setViewMode("streetview")}
+                            >
+                                Street View
                             </button>
                         </div>
-                    )}
-                </section>
+                    </section>
 
-                <section className="image-processing">
-                    <div className="upload-section">
-                        <h2>Upload Image</h2>
-                        <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleImageUpload}
-                            ref={fileInputRef}
-                            style={{ display: "none" }}
-                        />
-                        <button onClick={() => fileInputRef.current?.click()}>
-                            Select Image
-                        </button>
-
+                    <section className="capture-section">
+                        <h2>Capture Image/Upload</h2>
+                        <div className="capture-controls">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageUpload}
+                                ref={fileInputRef}
+                                style={{ display: "none" }}
+                            />
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                Upload Image
+                            </button>
+                            {viewMode === "streetview" && (
+                                <button
+                                    onClick={captureImage}
+                                    className="capture-btn"
+                                    disabled={isLoading || !selectedLocation}
+                                >
+                                    {isLoading
+                                        ? "Capturing..."
+                                        : "Capture Street View"}
+                                </button>
+                            )}
+                        </div>
+                        <div className="image-preview">
+                            <img
+                                src={uploadedImage || placeholderImage}
+                                alt="Captured or uploaded"
+                                className="preview-image"
+                            />
+                        </div>
                         {uploadedImage && (
-                            <div className="image-preview">
-                                <h3>Uploaded Image</h3>
-                                <img src={uploadedImage} alt="Uploaded" />
-                                <button
-                                    onClick={segmentImage}
-                                    disabled={isLoading}
-                                >
-                                    {isLoading
-                                        ? "Processing..."
-                                        : "Segment Image"}
-                                </button>
-                            </div>
+                            <button
+                                onClick={segmentImage}
+                                disabled={isLoading}
+                                className="action-button"
+                            >
+                                {isLoading ? "Processing..." : "Segment Image"}
+                            </button>
                         )}
-                    </div>
+                    </section>
+                </div>
 
-                    {segmentedImage && (
+                <div className="right-column">
+                    <section className="segmented-section">
+                        <h2>Segment Image</h2>
                         <div className="segmented-preview">
-                            <h3>Segmented Image</h3>
-                            <img src={segmentedImage} alt="Segmented" />
-
-                            <div className="prompt-section">
-                                <h3>Prompt</h3>
-                                <textarea
-                                    value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
-                                    rows={3}
-                                    placeholder="Enter a description for the generated image"
-                                />
-                                <button
-                                    onClick={generateImage}
-                                    disabled={isLoading}
-                                >
-                                    {isLoading
-                                        ? "Generating..."
-                                        : "Generate Image"}
-                                </button>
-                            </div>
+                            <img
+                                src={segmentedImage || placeholderImage}
+                                alt="Segmented"
+                                className="preview-image"
+                            />
                         </div>
-                    )}
 
-                    {generatedImage && (
-                        <div className="generated-preview">
-                            <h3>Generated Image</h3>
-                            <img src={generatedImage} alt="Generated" />
+                        <div className="prompt-section">
+                            <h3>Prompt</h3>
+                            <textarea
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                rows={3}
+                                placeholder="Enter a description for the generated image"
+                            />
+                            <button
+                                onClick={generateImage}
+                                disabled={isLoading || !segmentedImage}
+                                className="action-button"
+                            >
+                                {isLoading ? "Generating..." : "Generate Image"}
+                            </button>
                         </div>
-                    )}
+                    </section>
+                </div>
 
-                    {error && <div className="error-message">{error}</div>}
+                <section className="generated-section">
+                    <h2>Generated Image</h2>
+                    <div className="generated-preview">
+                        <img
+                            src={generatedImage || placeholderImage}
+                            alt="Generated"
+                            className="preview-image large"
+                        />
+                    </div>
                 </section>
+
+                {error && <div className="error-message">{error}</div>}
             </main>
         </div>
     );
