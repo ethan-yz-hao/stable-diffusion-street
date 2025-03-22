@@ -61,7 +61,7 @@ function App() {
         reader.readAsDataURL(file);
     };
 
-    // Capture the current view as an image (either map or street view)
+    // Capture the current view as an image (only street view)
     const captureImage = () => {
         if (!selectedLocation) {
             setError("Please select a location first");
@@ -72,49 +72,12 @@ function App() {
         setError(null);
 
         try {
-            if (viewMode === "map") {
-                captureMapImage();
-            } else {
-                captureStreetViewImage();
-            }
+            captureStreetViewImage();
         } catch (err) {
             console.error("Error capturing image:", err);
             setError("Failed to capture image");
             setIsLoading(false);
         }
-    };
-
-    // Capture map view
-    const captureMapImage = () => {
-        if (!mapRef.current || !selectedLocation) {
-            setError("Map is not loaded yet");
-            setIsLoading(false);
-            return;
-        }
-
-        // Get the current zoom
-        const zoom = mapRef.current.getZoom();
-
-        // Construct a Google Static Maps API URL
-        const width = 640; // Max for free tier
-        const height = 400;
-        const scale = 2; // For higher resolution
-
-        let mapUrl = `https://maps.googleapis.com/maps/api/staticmap?`;
-        mapUrl += `center=${selectedLocation.lat},${selectedLocation.lng}`;
-        mapUrl += `&zoom=${zoom || 16}`;
-        mapUrl += `&size=${width}x${height}`;
-        mapUrl += `&scale=${scale}`;
-        mapUrl += `&maptype=roadmap`;
-
-        // Add marker
-        mapUrl += `&markers=color:red|${selectedLocation.lat},${selectedLocation.lng}`;
-
-        // Add API key
-        mapUrl += `&key=${googleMapsApiKey}`;
-
-        // Load the image
-        loadImageFromUrl(mapUrl);
     };
 
     // Capture street view
@@ -181,11 +144,6 @@ function App() {
         };
 
         img.src = url;
-    };
-
-    // Toggle between map and street view
-    const toggleViewMode = () => {
-        setViewMode(viewMode === "map" ? "streetview" : "map");
     };
 
     // Handle street view load
@@ -310,6 +268,9 @@ function App() {
                                 zoom={16}
                                 onClick={handleMapClick}
                                 onLoad={onMapLoad}
+                                options={{
+                                    streetViewControl: false,
+                                }}
                             >
                                 {selectedLocation && (
                                     <Marker position={selectedLocation} />
@@ -339,7 +300,7 @@ function App() {
                         )}
                     </LoadScript>
 
-                    {selectedLocation && (
+                    {selectedLocation && viewMode === "streetview" && (
                         <div className="location-info">
                             <p>
                                 Selected: {selectedLocation.lat.toFixed(4)},{" "}
@@ -352,11 +313,7 @@ function App() {
                             >
                                 {isLoading
                                     ? "Capturing..."
-                                    : `Capture ${
-                                          viewMode === "map"
-                                              ? "Map"
-                                              : "Street View"
-                                      } as Image`}
+                                    : "Capture Street View as Image"}
                             </button>
                         </div>
                     )}
