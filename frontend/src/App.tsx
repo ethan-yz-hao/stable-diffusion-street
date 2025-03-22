@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
     GoogleMap,
     LoadScript,
@@ -10,6 +10,8 @@ import "./App.css";
 import { Stage, Layer, Image as KonvaImage, Line } from "react-konva";
 import useImage from "use-image";
 import Konva from "konva";
+import Papa from "papaparse";
+
 // API endpoint
 const API_URL = "http://localhost:5000";
 
@@ -32,20 +34,53 @@ const placeholderImage =
 // Get Google Maps API key from environment variables
 const googleMapsApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 
-// Colors for segmentation editing with their meanings from ADE20K dataset
-const segmentationClasses = [
-    { color: "#787878", name: "wall" },
-    { color: "#B47878", name: "building" },
-    { color: "#06E6E6", name: "sky" },
-    { color: "#503232", name: "floor" },
-    { color: "#04C803", name: "tree" },
-    { color: "#787850", name: "ceiling" },
-    { color: "#8C8C8C", name: "road" },
-    { color: "#CC05FF", name: "bed" },
-    { color: "#E6E6E6", name: "window" },
-    { color: "#04FA07", name: "grass" },
-    { color: "#FF0000", name: "custom" }, // Custom color option
-];
+// Load segmentation classes from ADE20K dataset
+const useSegmentationClasses = () => {
+    const [segmentationClasses, setSegmentationClasses] = useState<
+        Array<{ id: string; color: string; name: string }>
+    >([]);
+
+    useEffect(() => {
+        const fetchSegmentationClasses = async () => {
+            try {
+                const response = await fetch("/ade20k.csv");
+                const csvText = await response.text();
+
+                Papa.parse(csvText, {
+                    header: true,
+                    complete: (results: Papa.ParseResult<any>) => {
+                        const classes = results.data
+                            .filter(
+                                (row: any) => row.Idx && row["Color_Code(hex)"]
+                            ) // Filter out any incomplete rows
+                            .map((row: any) => ({
+                                id: `class_${row.Idx}`,
+                                color: row["Color_Code(hex)"],
+                                name: row.Name
+                                    ? row.Name.split(";")[0]
+                                    : `class_${row.Idx}`, // Use first name if multiple are provided
+                            }));
+
+                        // Add custom color option at the end
+                        classes.push({
+                            id: "custom",
+                            color: "#FF0000",
+                            name: "custom",
+                        });
+
+                        setSegmentationClasses(classes);
+                    },
+                });
+            } catch (error) {
+                console.error("Error loading segmentation classes:", error);
+            }
+        };
+
+        fetchSegmentationClasses();
+    }, []);
+
+    return segmentationClasses;
+};
 
 // Image Editor Component
 const ImageEditor = ({
@@ -55,7 +90,12 @@ const ImageEditor = ({
     image: string;
     onSave: (uri: string) => void;
 }) => {
-    const [selectedClass, setSelectedClass] = useState(segmentationClasses[0]);
+    const segmentationClasses = useSegmentationClasses();
+    const [selectedClass, setSelectedClass] = useState<{
+        id: string;
+        color: string;
+        name: string;
+    } | null>(null);
     const [customColor, setCustomColor] = useState("#FF0000");
     const [lines, setLines] = useState<
         {
@@ -69,9 +109,17 @@ const ImageEditor = ({
     const [imageObj] = useImage(image || placeholderImage);
     const stageRef = useRef<Konva.Stage>(null);
 
+    // Update selectedClass when segmentationClasses changes
+    useEffect(() => {
+        if (segmentationClasses.length > 0) {
+            setSelectedClass(segmentationClasses[0]);
+        }
+    }, [segmentationClasses]);
+
     // Get the active color (either selected class color or custom color)
     const getActiveColor = () => {
-        return selectedClass.name === "custom"
+        if (!selectedClass) return "#000000"; // Default color if nothing is selected yet
+        return selectedClass.id === "custom"
             ? customColor
             : selectedClass.color;
     };
@@ -124,9 +172,9 @@ const ImageEditor = ({
     };
 
     const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const selectedValue = e.target.value;
+        const selectedId = e.target.value;
         const selectedClassObj = segmentationClasses.find(
-            (c) => c.color === selectedValue
+            (c) => c.id === selectedId
         );
         if (selectedClassObj) {
             setSelectedClass(selectedClassObj);
@@ -150,12 +198,12 @@ const ImageEditor = ({
                 <div className="segment-class-selector">
                     <label>Segment Class:</label>
                     <select
-                        value={selectedClass.color}
+                        value={selectedClass?.id || ""}
                         onChange={handleClassChange}
                         className="segment-dropdown"
                     >
                         {segmentationClasses.map((cls, i) => (
-                            <option key={i} value={cls.color}>
+                            <option key={i} value={cls.id}>
                                 {cls.name}
                             </option>
                         ))}
@@ -165,7 +213,7 @@ const ImageEditor = ({
                         style={{ backgroundColor: getActiveColor() }}
                     ></div>
                 </div>
-                {selectedClass.name === "custom" && (
+                {selectedClass?.id === "custom" && (
                     <div className="custom-color-picker">
                         <label>Custom Color:</label>
                         <input
