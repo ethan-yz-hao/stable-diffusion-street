@@ -1,5 +1,3 @@
 # model folder
 model/
-.gradio
 .venv
-.env

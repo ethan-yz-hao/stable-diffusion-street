@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 import torch
-from diffusers import ControlNetModel, AutoencoderKL, StableDiffusionXLControlNetPipeline, StableDiffusionXLControlNetInpaintPipeline
+from diffusers import ControlNetModel, AutoencoderKL, StableDiffusionXLControlNetInpaintPipeline
 from transformers import AutoImageProcessor, UperNetForSemanticSegmentation
 from PIL import Image
 import numpy as np
